@@ -33,14 +33,14 @@ class NuImagesDataset(object):
         cause the training to crash if included. This behavior can be changed by setting the
         'remove_empty' argument when making a NuImagesDataset.
         - Currently, the dataset class skips surface annotations (drivable surfaces and ego vehicle).
-        Only object annotations are included.
+        Only object annotations (cars, pedestrians, etc) are included.
         - Any bounding boxes with zero height or width are removed; these cause training to crash
         if left in. The NuImages training set seems to contain one annotation with zero height.
 
     """
 
     def __init__(self, nuimages: NuImages, transforms=None, remove_empty=True):
-        # If there are no annotations, this dataset holds the nuImages test set
+        # Check if the nuimages object contains the test set (no annotations)
         if len(nuimages.object_ann) == 0:
             self.has_ann = False
         # Otherwise, dataset is the train or val split
@@ -84,8 +84,8 @@ class NuImagesDataset(object):
             if object_sd_token not in self.object_anns_dict.keys():
                 self.object_anns_dict[object_sd_token] = []
             # Remove annotation if bounding box has zero height or width
-            # NuImages training set contains one of these annotations,
-            # breaks training if it isn't removed
+            # The NuImages training set contains one of these annotations,
+            # which crashes the training if it isn't removed
             b = o['bbox']
             w = b[2] - b[0]
             h = b[3] - b[1]
@@ -109,7 +109,10 @@ class NuImagesDataset(object):
 
         Returns
         -------
-        torch.Tensor, dict
+        image: torch.Tensor
+            An RGB training image.
+        target: dict
+            Dictionary containing the object annotations associated with this image.
         """
         # Get a sample - i.e. an annotated camera image
         sample = self.nuimages.sample[self.samples_with_objects[idx]]
@@ -124,17 +127,16 @@ class NuImagesDataset(object):
         if not self.has_ann:
             return image, None
 
-        # Get the surface and object annotations corresponding to this sample data only
-        # object_anns = [o for o in self.nuimages.object_ann if o['sample_data_token'] == sd_token]
+        # Get the object annotations corresponding to this sample data only
         object_anns = self.object_anns_dict[sd_token]
-        # TODO surface annotations in nuscenes lack bounding boxes. Skip these for now.
-        # Treat surfaces as objects, if we are learning surfaces too
+
+        # NOTE: Surface annotations in nuscenes lack bounding boxes and instance IDs. Skip for now.
         # if self.learn_surfaces:
         #     surface_anns = [o for o in self.nuimages.surface_ann if o['sample_data_token'] == sd_token]
         #     object_anns += surface_anns
 
         # Get bounding boxes
-        # Note object_ann['bbox'] gives bbox in [xmin, ymin, xmax, ymax]
+        # Note object_ann['bbox'] gives the bounding box as [xmin, ymin, xmax, ymax]
         boxes = torch.as_tensor([o['bbox'] for o in object_anns], dtype=torch.float32)
 
         # Get class labels for each bounding box
@@ -144,7 +146,6 @@ class NuImagesDataset(object):
                                  dtype=torch.int64)
 
         # Get nuimages segmentation masks
-        # semantic_mask, instance_mask = self.nuimages.get_segmentation(sample['key_camera_token'])
         # The nuimages instance mask is (H by W) where each value is 0 to N (N is number of object annotations)
         # Convert this to a single (N by H by W) array
         instance_mask = get_instance_mask(self.nuimages, image, object_anns)
@@ -193,7 +194,7 @@ def get_instance_mask(nuimages, image, object_anns):
     ----------
     nuimages: NuImages
     image: Image
-    object_anns: list
+    object_anns: list[dict]
 
     Returns
     -------

@@ -9,7 +9,7 @@ from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
 from utils import transforms as T
 
 
-def get_model_instance_segmentation(num_classes, pretrained=True):
+def get_model_instance_segmentation(num_classes=33, pretrained=True):
     # load an instance segmentation model pre-trained pre-trained on COCO
     model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=pretrained)
 
@@ -38,3 +38,8 @@ def get_transform(train):
 
 def collate_fn(batch):
     return tuple(zip(*batch))
+
+def load_model(model_filename, num_classes=33):
+    model = get_model_instance_segmentation(num_classes, pretrained=False)
+    model.load_state_dict(str(model_filename))
+    return model
